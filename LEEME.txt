@@ -1,0 +1,58 @@
+AMERICANO DE PÁDEL - servidor local
+====================================
+
+Qué necesitás
+  Node.js (gratis): https://nodejs.org  -> instalá la versión "LTS".
+  No hace falta instalar nada más.
+
+Cómo arrancarlo
+  1. Descomprimí esta carpeta en tu computadora.
+  2. Abrí una terminal dentro de la carpeta:
+       - Windows: abrí la carpeta, escribí "cmd" en la barra de direcciones y Enter.
+       - Mac: clic derecho en la carpeta > "Nuevo terminal en la carpeta".
+  3. Escribí:   node server.js
+  4. Aparecen dos direcciones:
+       - http://localhost:3000             -> para abrirlo en la misma computadora
+       - http://192.168.x.x:3000           -> para abrirlo desde el celular
+     El celular tiene que estar conectado a la MISMA red wifi que la computadora.
+
+Cómo se usa
+  - Cargá el nombre del americano, las participantes (una por renglón), las canchas
+    y los puntos para ganar, y tocá "Generar partidos".
+  - Los resultados se guardan en el archivo datos.json de esta carpeta, así que no
+    se pierden aunque cierres el navegador o apagues el servidor.
+  - Varios celulares pueden abrir la misma dirección a la vez: todos ven los mismos
+    resultados y se actualizan solos cada pocos segundos.
+  - "Nuevo americano" vuelve a la carga de participantes (con la lista anterior lista para editar).
+
+Para detenerlo: en la terminal apretá Ctrl + C.
+Para usar otro puerto:  PORT=8080 node server.js   (en Windows: set PORT=8080 && node server.js)
+
+Si el celular no conecta: revisá que esté en la misma wifi y, en Windows, aceptá el aviso
+del firewall que aparece la primera vez que corrés "node server.js" (permitir en redes privadas).
+
+Tip: si abrís public/index.html directamente con doble clic (sin servidor), también funciona,
+pero los resultados quedan guardados solo en ese navegador.
+
+
+SUBIRLO A HOSTINGER
+===================
+
+Opción A - Cualquier plan de hosting web (Premium, Business, Cloud): usando PHP
+  1. En hPanel entrá a "Administrador de archivos" y abrí la carpeta public_html
+     (o una subcarpeta, por ejemplo public_html/americano).
+  2. Subí los dos archivos de la carpeta "public": index.html y api.php.
+  3. Listo: entrá a tudominio.com (o tudominio.com/americano).
+  Los resultados se guardan en un archivo datos.json que se crea solo en esa carpeta.
+  No hace falta subir server.js ni package.json.
+
+Opción B - Planes Business o Cloud con "Node.js Apps"
+  1. En hPanel elegí agregar un sitio web > Node.js Apps > subir archivo .zip.
+  2. Subí este mismo zip (contiene package.json, server.js y la carpeta public).
+  3. Comando de inicio: npm start (o node server.js). No requiere instalar dependencias.
+  Ojo: si volvés a desplegar la app, el archivo datos.json puede reiniciarse.
+
+Para un uso como este, la Opción A es la más simple y funciona en todos los planes.
+
+Importante: cualquiera que tenga la dirección puede cargar o borrar resultados.
+Compartila solo con el grupo.
