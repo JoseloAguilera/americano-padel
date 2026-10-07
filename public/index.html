@@ -420,6 +420,9 @@ async function rpc(name, body={}){
   if (!r.ok) throw new Error(await r.text());
   return await r.json();
 }
+function errorMessage(e){
+  try { return JSON.parse(e.message).message || e.message; } catch(_) { return e?.message || ""; }
+}
 function setMsg(id, text, kind="") { const el=$(id); el.textContent=text; el.className="form-msg" + (kind ? ` ${kind}` : ""); }
 function stateForSave(){ return {...S, updatedAt: new Date().toISOString()}; }
 async function listTournaments(){
@@ -708,7 +711,7 @@ $("login-submit").onclick = async () => {
     localStorage.setItem(ADMIN_SESSION_KEY, JSON.stringify(adminSession));
     authToken = row.token; currentEditToken = row.token;
     history.replaceState(null, "", "/"); setMsg("login-msg", "Sesión iniciada", "ok"); await renderHome();
-  } catch(e) { setMsg("login-msg", "Usuario o contraseña incorrectos", "err"); }
+  } catch(e) { $("login-pass").value = ""; setMsg("login-msg", "Usuario o contraseña incorrectos", "err"); }
 };
 $("login-pass").addEventListener("keydown", e => { if (e.key === "Enter") $("login-submit").click(); });
 $("logout-admin").onclick = () => { localStorage.removeItem(ADMIN_SESSION_KEY); adminSession = null; authToken = ""; currentEditToken = ""; setSync("Modo visitante", true); renderHome(); };
@@ -726,7 +729,14 @@ $("change-admin-pass-btn").onclick = async () => {
   try {
     await rpc("americano_change_admin_password", {p_current_password: current, p_new_password: next});
     $("current-admin-pass").value = ""; $("change-admin-pass").value = ""; setMsg("password-msg", "Contraseña actualizada", "ok");
-  } catch(e) { setMsg("password-msg", "No se pudo actualizar. Revisá la contraseña actual y usá mínimo 8 caracteres.", "err"); }
+  } catch(e) {
+    const msg = errorMessage(e);
+    $("current-admin-pass").value = "";
+    if (msg.includes("Contraseña actual incorrecta")) setMsg("password-msg", "La contraseña actual es incorrecta.", "err");
+    else if (msg.includes("al menos 8 caracteres")) setMsg("password-msg", "La nueva contraseña debe tener mínimo 8 caracteres.", "err");
+    else if (msg.includes("No autorizado")) setMsg("password-msg", "Sesión vencida. Volvé a iniciar sesión.", "err");
+    else setMsg("password-msg", "No se pudo actualizar. Revisá los datos e intentá de nuevo.", "err");
+  }
 };
 
 load();

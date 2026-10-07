@@ -33,3 +33,5 @@ def test_admin_login_markers():
     assert 'Actualizar mi contraseña' in HTML
     assert 'americano-admin-session-v1' in HTML
     assert 'Panel admin' in HTML
+    assert 'La contraseña actual es incorrecta.' in HTML
+    assert '$("current-admin-pass").value = ""' in HTML
