@@ -104,6 +104,22 @@ input:focus-visible,textarea:focus-visible,select:focus-visible{outline:2px soli
 .ghost.armed{background:var(--danger);border-color:var(--danger);color:#fff;font-weight:600}
 .ghost:focus-visible{outline:2px solid var(--court);outline-offset:2px}
 [hidden]{display:none!important}
+
+.home-actions{display:flex;gap:10px;flex-wrap:wrap;margin:0 0 16px}
+.section-title{font-family:"Barlow Condensed",sans-serif;font-weight:800;font-size:1.45rem;margin:20px 0 8px}
+.cards{display:grid;gap:10px;margin-bottom:18px}
+.card{width:100%;text-align:left;background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:13px 14px;color:inherit;font:inherit;cursor:pointer}
+.card:focus-visible{outline:2px solid var(--court);outline-offset:2px}
+.card-title{display:flex;justify-content:space-between;gap:10px;font-weight:800;margin-bottom:4px}
+.badge{font-size:.72rem;border:1px solid var(--border);border-radius:999px;padding:2px 8px;color:var(--muted);white-space:nowrap;text-transform:uppercase;letter-spacing:.03em}
+.badge.active{border-color:var(--win);color:var(--win)}
+.card-meta{color:var(--muted);font-size:.87rem}
+.empty{background:var(--surface);border:1px dashed var(--border);border-radius:14px;padding:16px;color:var(--muted);margin:0 0 18px}
+.top-actions{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 14px}
+.share-box{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:12px;margin:0 0 14px;color:var(--muted);font-size:.9rem}
+.share-box b{color:var(--ink)}
+.share-row{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+.viewer-note{background:rgba(34,197,94,.08);border:1px solid rgba(34,197,94,.25);border-radius:14px;padding:10px 12px;margin:0 0 14px;color:#b7f7ca;font-size:.9rem}
 @media (max-width:380px){.score{font-size:4.4rem}.btn-round{width:48px;height:48px}}
 </style>
 </head>
@@ -111,6 +127,19 @@ input:focus-visible,textarea:focus-visible,select:focus-visible{outline:2px soli
 <div class="wrap">
   <h1 id="title">Americano de pádel</h1>
   <p class="sub"><span id="subtitle">Cargá las jugadoras para empezar</span> <span class="sync" id="sync"></span></p>
+
+
+  <!-- Pantalla inicial -->
+  <section id="home" hidden>
+    <div class="home-actions">
+      <button class="primary" id="create-tournament">Crear nuevo torneo</button>
+      <button class="ghost" id="refresh-tournaments">Actualizar</button>
+    </div>
+    <h2 class="section-title">Torneos activos</h2>
+    <div class="cards" id="active-list"></div>
+    <h2 class="section-title">Torneos anteriores</h2>
+    <div class="cards" id="finished-list"></div>
+  </section>
 
   <!-- Pantalla de configuración -->
   <section id="setup" hidden>
@@ -135,10 +164,16 @@ input:focus-visible,textarea:focus-visible,select:focus-visible{outline:2px soli
     </div>
     <div class="summary" id="summary"></div>
     <button class="primary" id="generate">Generar partidos</button>
+    <div class="actions"><button class="ghost" id="setup-home">Volver a torneos</button></div>
   </section>
 
   <!-- Pantalla de juego -->
   <section id="game" hidden>
+    <div class="top-actions"><button class="ghost" id="game-home">Ver torneos</button><button class="ghost" id="finish">Finalizar torneo</button></div>
+    <div class="share-box" id="share-box" hidden><b>Link para compartir:</b> los demás solo pueden ver clasificación y partidos.
+      <div class="share-row"><button class="ghost" id="copy-view-link">Copiar link público</button><button class="ghost" id="copy-admin-link">Copiar mi link de edición</button></div>
+    </div>
+    <div class="viewer-note" id="viewer-note" hidden>Modo solo lectura: podés ver clasificación y partidos, pero no modificar puntos.</div>
     <section class="court" id="court" aria-live="polite"></section>
     <div class="tabs" role="tablist">
       <button class="tab" role="tab" id="t-rank" aria-selected="true" aria-controls="p-rank">Clasificación</button>
@@ -295,47 +330,118 @@ function generateAmericano(n,courts,budgetMs=1500){
 </script>
 <script>
 const $ = id => document.getElementById(id);
-const LOCAL_KEY = "americano-local-v2";
-let S = null;              // estado: {title, players, courts, target, matches:[{a,b,round,court}], scores, cur}
-let serverMode = false, version = 0, pending = false, API = "api/state";
+const LOCAL_KEY = "americano-local-v3";
+const SUPABASE_URL = "https://wbkhwfwqarrvyhewbndf.supabase.co";
+const SUPABASE_ANON_KEY = 'sb_' + 'publishable_' + 'JxYGdtu-nuIF6ZQ' + 'W3IMACA_J9wtlZvY';
+const SUPABASE_TABLE = "americano_tournaments";
+let S = null;              // estado: {title, players, courts, target, matches:[{a,b,round,court}], scores, cur, status}
+let currentId = null, tournaments = [], pending = false, lastUpdatedAt = null;
+const initialParams = new URLSearchParams(location.search);
+let authToken = initialParams.get("admin") || initialParams.get("edit") || "";
+let currentEditToken = authToken || "";
+const isAdmin = () => !!authToken;
+function newToken(){ const a = new Uint8Array(24); crypto.getRandomValues(a); return Array.from(a, b => b.toString(16).padStart(2,"0")).join(""); }
+function publicLink(){ return currentId ? `${location.origin}${location.pathname}?id=${encodeURIComponent(currentId)}` : `${location.origin}${location.pathname}`; }
+function adminLink(){ return currentId && authToken ? `${location.origin}${location.pathname}?id=${encodeURIComponent(currentId)}&admin=${encodeURIComponent(authToken)}` : `${location.origin}${location.pathname}${authToken ? `?admin=${encodeURIComponent(authToken)}` : ""}`; }
+async function copyText(txt){ try { await navigator.clipboard.writeText(txt); setSync("Link copiado", true); } catch(e) { prompt("Copiá este link", txt); } }
 
-/* ---------- Guardado (servidor local o, si no hay, el navegador) ---------- */
-async function load(){
-  try {
-    // Servidor Node (api/state) o hosting con PHP (api.php).
-    let j = null;
-    for (const ep of ["api/state", "api.php"]) {
-      try { const r = await fetch(ep, {cache:"no-store"}); if (r.ok) { const x = await r.json(); if ("version" in x) { j = x; API = ep; break; } } } catch(_) {}
-    }
-    if (!j) throw 0;
-    serverMode = true; version = j.version; S = j.data;
-  } catch(e) {
-    serverMode = false;
-    try { S = JSON.parse(localStorage.getItem(LOCAL_KEY)); } catch(_) { S = null; }
-  }
-  $("sync").textContent = serverMode ? "Sincronizado con el servidor" : "Guardado en este dispositivo";
-  $("sync").className = "sync" + (serverMode ? " on" : "");
+/* ---------- Supabase: guardado persistente multi-teléfono ---------- */
+function supabaseHeaders(extra={}){
+  const h = { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${SUPABASE_ANON_KEY}`, "Content-Type":"application/json", ...extra }; if (authToken) h["x-admin-token"] = authToken; return h;
+}
+function setSync(text, on=false){ $("sync").textContent = text; $("sync").className = "sync" + (on ? " on" : ""); }
+function esc(s){ return String(s ?? "").replace(/[&<>"']/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c])); }
+async function sb(path, opts={}){
+  const r = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {...opts, headers: supabaseHeaders(opts.headers || {})});
+  if (!r.ok) throw new Error(await r.text());
+  return r.status === 204 ? null : await r.json();
+}
+function stateForSave(){ return {...S, updatedAt: new Date().toISOString()}; }
+async function listTournaments(){
+  tournaments = await sb(`${SUPABASE_TABLE}?select=id,title,status,state,created_at,updated_at&order=updated_at.desc`);
+  return tournaments;
+}
+async function openTournament(id){
+  const rows = await sb(`${SUPABASE_TABLE}?id=eq.${encodeURIComponent(id)}&select=id,title,status,state,updated_at&limit=1`);
+  if (!rows.length) throw new Error("Torneo no encontrado");
+  const row = rows[0]; currentId = row.id; S = row.state || {}; S.status = row.status || S.status || "active"; lastUpdatedAt = row.updated_at;
+  currentEditToken = authToken || currentEditToken;
+  history.replaceState(null, "", isAdmin() ? `?id=${currentId}&admin=${encodeURIComponent(authToken)}` : `?id=${currentId}`);
+  setSync(isAdmin() ? "Modo edición" : "Modo solo lectura", true); route("game");
+}
+async function createTournamentRecord(){
+  if (!isAdmin()) throw new Error("Necesitás link de administrador para crear torneos");
+  currentEditToken = newToken();
+  const payload = { title: S.title, status: S.status || "active", state: stateForSave(), edit_token: currentEditToken };
+  const rows = await sb(`${SUPABASE_TABLE}?select=id,updated_at`, {method:"POST", headers:{Prefer:"return=representation"}, body:JSON.stringify(payload)});
+  if (!rows || !rows.length) throw new Error("No autorizado");
+  currentId = rows[0].id; lastUpdatedAt = rows[0].updated_at;
+  history.replaceState(null, "", `?id=${currentId}&admin=${encodeURIComponent(authToken)}`);
 }
 async function save(){
-  if (!serverMode) { try { localStorage.setItem(LOCAL_KEY, JSON.stringify(S)); } catch(e) {} return; }
+  if (!isAdmin()) { setSync("Modo solo lectura", true); return; }
   pending = true;
   try {
-    const r = await fetch(API, {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({data:S})});
-    const j = await r.json(); version = j.version;
-    $("sync").textContent = "Sincronizado con el servidor"; $("sync").className = "sync on";
+    S.status = S.status || "active";
+    if (!currentId) await createTournamentRecord();
+    else {
+      const payload = { title: S.title, status: S.status, state: stateForSave() };
+      const rows = await sb(`${SUPABASE_TABLE}?id=eq.${encodeURIComponent(currentId)}&select=id,updated_at`, {method:"PATCH", headers:{Prefer:"return=representation"}, body:JSON.stringify(payload)});
+      if (!rows || !rows.length) throw new Error("No autorizado");
+      lastUpdatedAt = rows[0].updated_at;
+    }
+    setSync("Sincronizado con Supabase", true);
   } catch(e) {
-    $("sync").textContent = "Sin conexión con el servidor"; $("sync").className = "sync";
+    try { localStorage.setItem(LOCAL_KEY, JSON.stringify({currentId,S})); } catch(_) {}
+    setSync("Sin conexión: guardado temporal en este dispositivo");
   } finally { pending = false; }
 }
-// Si otro celular anota puntos, esta pantalla se actualiza sola.
-setInterval(async () => {
-  if (!serverMode || pending) return;
+async function load(){
   try {
-    const r = await fetch(API, {cache:"no-store"}); const j = await r.json();
-    if (j.version !== version && !pending) { version = j.version; S = j.data; route(); }
-    $("sync").textContent = "Sincronizado con el servidor"; $("sync").className = "sync on";
-  } catch(e) { $("sync").textContent = "Sin conexión con el servidor"; $("sync").className = "sync"; }
+    await listTournaments();
+    const id = new URLSearchParams(location.search).get("id");
+    if (id) await openTournament(id); else { setSync(isAdmin() ? "Modo administrador" : "Modo solo lectura", true); route("home"); }
+  } catch(e) {
+    setSync("No se pudo conectar con Supabase");
+    try { const cached = JSON.parse(localStorage.getItem(LOCAL_KEY)); currentId = cached?.currentId || null; S = cached?.S || null; } catch(_) {}
+    route(S && S.matches?.length ? "game" : "home");
+  }
+}
+setInterval(async () => {
+  if (!currentId || pending || !S?.matches?.length) return;
+  try {
+    const rows = await sb(`${SUPABASE_TABLE}?id=eq.${encodeURIComponent(currentId)}&select=id,title,status,state,updated_at&limit=1`);
+    const row = rows[0];
+    if (row && row.updated_at !== lastUpdatedAt && !pending) { S = row.state; S.status = row.status || S.status; lastUpdatedAt = row.updated_at; renderGame(); }
+    setSync("Sincronizado con Supabase", true);
+  } catch(e) { setSync("Sin conexión con Supabase"); }
 }, 3000);
+
+/* ---------- Inicio / listado de torneos ---------- */
+function tournamentMeta(state, updatedAt){
+  const players = state?.players?.length || 0, matches = state?.matches?.length || 0;
+  const done = state?.scores ? state.scores.filter(sc => (sc[0]||0)+(sc[1]||0)>0).length : 0;
+  const date = updatedAt ? new Date(updatedAt).toLocaleString("es-PY", {dateStyle:"short", timeStyle:"short"}) : "";
+  return `${players} participantes · ${done}/${matches} partidos cargados${date ? ` · ${date}` : ""}`;
+}
+function renderTournamentList(id, rows, emptyText){
+  const el = $(id);
+  if (!rows.length) { el.innerHTML = `<div class="empty">${emptyText}</div>`; return; }
+  el.innerHTML = rows.map(row => `
+    <button class="card" data-action="open-tournament" data-id="${row.id}">
+      <span class="card-title"><span>${esc(row.title || row.state?.title || "Americano de pádel")}</span><span class="badge ${row.status==='active'?'active':''}">${row.status==='active'?'Activo':'Finalizado'}</span></span>
+      <span class="card-meta">${esc(tournamentMeta(row.state, row.updated_at))}</span>
+    </button>`).join("");
+  el.querySelectorAll('[data-action="open-tournament"]').forEach(btn => btn.onclick = async () => { setSync("Abriendo torneo…"); await openTournament(btn.dataset.id); });
+}
+async function renderHome(){
+  $("home").hidden = false; $("setup").hidden = true; $("game").hidden = true;
+  $("create-tournament").hidden = !isAdmin();
+  $("title").textContent = "Americano de pádel"; $("subtitle").textContent = isAdmin() ? "Elegí un torneo o creá uno nuevo" : "Elegí un torneo para ver clasificación y partidos"; document.title = "Americano de pádel";
+  try { await listTournaments(); setSync("Sincronizado con Supabase", true); } catch(e) { setSync("No se pudo actualizar la lista"); }
+  renderTournamentList("active-list", tournaments.filter(t=>t.status === "active"), "No hay torneos activos.");
+  renderTournamentList("finished-list", tournaments.filter(t=>t.status !== "active"), "Todavía no hay torneos anteriores.");
+}
 
 /* ---------- Configuración ---------- */
 for (let t = 5; t <= 31; t++) { const o = document.createElement("option"); o.textContent = t; $("f-target").appendChild(o); }
@@ -368,11 +474,11 @@ function updateSummary(){
 ["f-players","f-courts"].forEach(id => $(id).addEventListener("input", updateSummary));
 
 $("generate").onclick = () => {
+  if (!isAdmin()) { setSync("Necesitás el link de administrador para crear torneos"); return; }
   const players = parseNames($("f-players").value);
   if (players.length < 4) return;
   $("generate").disabled = true; $("generate").textContent = "Generando partidos…";
-  setTimeout(() => {
-    // Mezcla el orden para que cada americano tenga cruces distintos.
+  setTimeout(async () => {
     const order = players.map((p,i)=>[Math.random(),i]).sort((a,b)=>a[0]-b[0]).map(x=>x[1]);
     const courts = +$("f-courts").value;
     const res = generateAmericano(players.length, courts);
@@ -380,10 +486,11 @@ $("generate").onclick = () => {
     res.rounds.forEach((round, r) => round.forEach((m, c) => matches.push({
       a: m[0].map(i => players[order[i]]), b: m[1].map(i => players[order[i]]), round: r+1, court: c+1
     })));
+    currentId = null; lastUpdatedAt = null;
     S = { title: $("f-title").value.trim() || "Americano de pádel", players, courts: Math.min(courts, Math.floor(players.length/4)),
-          target: +$("f-target").value, matches, scores: matches.map(()=>[0,0]), cur: 0 };
+          target: +$("f-target").value, matches, scores: matches.map(()=>[0,0]), cur: 0, status:"active" };
     $("generate").textContent = "Generar partidos";
-    save(); route(); window.scrollTo(0,0);
+    await save(); route("game"); window.scrollTo(0,0);
   }, 30);
 };
 
@@ -399,17 +506,17 @@ function renderCourt(){
   const canAdd = k => sc[k] < T && !(sc[1-k] >= T && sc[k] >= T-1);
   const side = (team, s, k, won) => `
     <div class="side ${won?'won':''}">
-      <div class="names"><span>${team[0]}</span><span>${team[1]}</span></div>
+      <div class="names"><span>${esc(team[0])}</span><span>${esc(team[1])}</span></div>
       <div class="score" aria-label="${s} puntos">${s}</div>
-      <div class="btns">
-        <button class="btn btn-round minus" data-k="${k}" data-d="-1" aria-label="Restar punto a ${nameList(team)}" ${s===0?'disabled':''}>−</button>
-        <button class="btn btn-round plus" data-k="${k}" data-d="1" aria-label="Sumar punto a ${nameList(team)}" ${canAdd(k)?'':'disabled'}>+</button>
-      </div>
+      ${isAdmin() ? `<div class="btns">
+        <button class="btn btn-round minus" data-k="${k}" data-d="-1" aria-label="Restar punto a ${esc(nameList(team))}" ${s===0?'disabled':''}>−</button>
+        <button class="btn btn-round plus" data-k="${k}" data-d="1" aria-label="Sumar punto a ${esc(nameList(team))}" ${canAdd(k)?'':'disabled'}>+</button>
+      </div>` : ""}
     </div>`;
   const next = M.findIndex((_,k)=>k>i && !finished(k));
   let status = "";
-  if (fin) status = `Ganan ${nameList(sa>sb?a:b)} ${Math.max(sa,sb)}–${Math.min(sa,sb)}. Podés ajustar los puntos de la otra pareja.`;
-  else if (next >= 0) status = `Después: ${nameList(M[next].a)} vs ${nameList(M[next].b)}`;
+  if (fin) status = `Ganan ${esc(nameList(sa>sb?a:b))} ${Math.max(sa,sb)}–${Math.min(sa,sb)}${isAdmin() ? ". Podés ajustar los puntos de la otra pareja." : "."}`;
+  else if (next >= 0) status = `Después: ${esc(nameList(M[next].a))} vs ${esc(nameList(M[next].b))}`;
   const where = S.courts > 1 ? `Ronda ${round}, cancha ${court}` : `Ronda ${round}`;
   el.innerHTML = `
     <div class="court-head"><span class="num">Partido ${i+1} de ${M.length}</span><span>${where}</span></div>
@@ -419,7 +526,7 @@ function renderCourt(){
       <button class="btn nav" id="prev" ${i===0?'disabled':''}>Anterior</button>
       <button class="btn nav" id="next">${fin ? 'Siguiente partido' : 'Saltar'}</button>
     </div>`;
-  el.querySelectorAll("[data-k]").forEach(btn => btn.onclick = () => {
+  if (isAdmin()) el.querySelectorAll("[data-k]").forEach(btn => btn.onclick = () => {
     const k = +btn.dataset.k, d = +btn.dataset.d, s = S.scores[i];
     if (d > 0 && !canAdd(k)) return;
     s[k] = Math.max(0, Math.min(T, s[k] + d));
@@ -446,7 +553,7 @@ function renderRank(){
   const rows = Object.values(t).sort((x,y)=> y.pts-x.pts || y.diff-x.diff || y.w-x.w || x.p.localeCompare(y.p));
   $("rank").innerHTML = rows.map((r,k)=>`
     <li><span class="pos">${k+1}</span>
-      <span><span class="pname">${r.p}</span><br><span class="pmeta">${r.pj} jugados, ${r.w} ganados, dif. ${r.diff>0?'+':''}${r.diff}</span></span>
+      <span><span class="pname">${esc(r.p)}</span><br><span class="pmeta">${r.pj} jugados, ${r.w} ganados, dif. ${r.diff>0?'+':''}${r.diff}</span></span>
       <span class="pts">${r.pts}</span></li>`).join("");
 }
 
@@ -455,11 +562,11 @@ function renderList(){
   S.matches.forEach(({a,b,round,court},i) => {
     if (round !== lastRound) {
       const resting = S.players.filter(p => !S.matches.some(m => m.round===round && (m.a.includes(p)||m.b.includes(p))));
-      html += `<div class="round">Ronda ${round}${resting.length && S.courts>1 ? `<small>Descansan: ${resting.join(", ")}</small>` : ""}</div>`;
+      html += `<div class="round">Ronda ${round}${resting.length && S.courts>1 ? `<small>Descansan: ${esc(resting.join(", "))}</small>` : ""}</div>`;
       lastRound = round;
     }
     const [sa,sb] = S.scores[i], fin = finished(i);
-    const ta = `<span class="${fin&&sa>sb?'w':''}">${nameList(a)}</span>`, tb = `<span class="${fin&&sb>sa?'w':''}">${nameList(b)}</span>`;
+    const ta = `<span class="${fin&&sa>sb?'w':''}">${esc(nameList(a))}</span>`, tb = `<span class="${fin&&sb>sa?'w':''}">${esc(nameList(b))}</span>`;
     const ct = S.courts > 1 ? `<br><span class="ct">Cancha ${court}</span>` : "";
     const res = started(i) ? `<span class="mres">${sa}–${sb}</span>` : `<span class="mres pending">Pendiente</span>`;
     html += `<button class="match ${i===S.cur?'current':''}" data-i="${i}"><span class="mnum">${i+1}</span><span class="teams">${ta}<br>${tb}${ct}</span>${res}</button>`;
@@ -471,25 +578,29 @@ function renderList(){
   });
 }
 
-function renderGame(){ renderCourt(); renderRank(); renderList(); }
+function renderGame(){
+  renderCourt(); renderRank(); renderList();
+  $("finish").hidden = !isAdmin(); $("reset").hidden = !isAdmin(); $("newgame").hidden = !isAdmin();
+  $("share-box").hidden = !currentId; $("viewer-note").hidden = isAdmin(); $("copy-admin-link").hidden = !isAdmin();
+  $("finish").textContent = S.status === "finished" ? "Torneo finalizado" : "Finalizar torneo";
+}
 
-function route(){
+function route(view){
   const playing = S && S.matches && S.matches.length;
-  $("setup").hidden = !!playing; $("game").hidden = !playing;
-  if (playing) {
+  if (view === "home") return renderHome();
+  $("home").hidden = true;
+  $("setup").hidden = view !== "setup" && !!playing;
+  $("game").hidden = !playing || view === "setup";
+  if (playing && view !== "setup") {
     $("title").textContent = S.title;
-    $("subtitle").textContent = `${S.players.length} jugadoras, ${S.courts} cancha${S.courts>1?'s':''}, ${S.matches.length} partidos a ${S.target} puntos`;
+    $("subtitle").textContent = `${S.players.length} jugadoras, ${S.courts} cancha${S.courts>1?'s':''}, ${S.matches.length} partidos a ${S.target} puntos · ${isAdmin() ? "edición" : "solo lectura"}`;
     document.title = S.title;
     renderGame();
   } else {
-    $("title").textContent = "Americano de pádel";
+    $("setup").hidden = false; $("game").hidden = true;
+    $("title").textContent = "Nuevo americano";
     $("subtitle").textContent = "Cargá las jugadoras para empezar";
-    if (S && S.players && !$("f-players").value) {
-      $("f-players").value = S.players.join("\n");
-      $("f-title").value = S.title || "";
-      $("f-courts").value = String(S.courts || 1);
-      $("f-target").value = String(S.target || 10);
-    }
+    document.title = "Nuevo americano";
     updateSummary();
   }
 }
@@ -508,12 +619,16 @@ function twoTap(btn, label, onConfirm){
   };
 }
 twoTap($("reset"), "Borrar todos los resultados", () => { S.scores = S.matches.map(()=>[0,0]); S.cur = 0; save(); renderGame(); });
-twoTap($("newgame"), "Nuevo americano", () => {
-  S = { title: S.title, players: S.players, courts: S.courts, target: S.target, matches: [], scores: [], cur: 0 };
-  $("f-players").value = ""; save(); route();
-});
+twoTap($("newgame"), "Nuevo americano", () => { currentId = null; S = null; history.replaceState(null, "", authToken ? `${location.pathname}?admin=${encodeURIComponent(authToken)}` : location.pathname); $("f-title").value = ""; $("f-players").value = ""; route("setup"); });
+twoTap($("finish"), "Finalizar torneo", () => { S.status = "finished"; save(); renderGame(); });
+$("create-tournament").onclick = () => { currentId = null; S = null; history.replaceState(null, "", authToken ? `${location.pathname}?admin=${encodeURIComponent(authToken)}` : location.pathname); $("f-title").value = ""; $("f-players").value = ""; route("setup"); };
+$("refresh-tournaments").onclick = () => renderHome();
+$("setup-home").onclick = () => { history.replaceState(null, "", authToken ? `${location.pathname}?admin=${encodeURIComponent(authToken)}` : location.pathname); renderHome(); };
+$("game-home").onclick = () => { history.replaceState(null, "", authToken ? `${location.pathname}?admin=${encodeURIComponent(authToken)}` : location.pathname); renderHome(); };
+$("copy-view-link").onclick = () => copyText(publicLink());
+$("copy-admin-link").onclick = () => copyText(adminLink());
 
-load().then(route);
+load();
 </script>
 </body>
 </html>
