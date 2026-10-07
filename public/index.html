@@ -176,8 +176,20 @@ input:focus-visible,textarea:focus-visible,select:focus-visible{outline:2px soli
         </div>
       </div>
       <button class="ghost" id="add-admin-user">Agregar usuario admin</button>
-      <button class="ghost" id="logout-admin">Cerrar sesión</button>
       <p class="form-msg" id="admin-msg"></p>
+      <hr style="border:0;border-top:1px solid var(--border);margin:14px 0">
+      <p class="mini">Actualizar mi contraseña</p>
+      <div class="field">
+        <label for="current-admin-pass">Contraseña actual</label>
+        <input type="password" id="current-admin-pass" autocomplete="current-password" placeholder="contraseña actual">
+      </div>
+      <div class="field">
+        <label for="change-admin-pass">Nueva contraseña</label>
+        <input type="password" id="change-admin-pass" autocomplete="new-password" placeholder="mínimo 8 caracteres">
+      </div>
+      <button class="ghost" id="change-admin-pass-btn">Actualizar contraseña</button>
+      <button class="ghost" id="logout-admin">Cerrar sesión</button>
+      <p class="form-msg" id="password-msg"></p>
     </div>
     <h2 class="section-title">Torneos activos</h2>
     <div class="cards" id="active-list"></div>
@@ -707,6 +719,14 @@ $("add-admin-user").onclick = async () => {
     await rpc("americano_create_admin_user", {p_username: username, p_password: password});
     $("new-admin-user").value = ""; $("new-admin-pass").value = ""; setMsg("admin-msg", `Usuario ${username} creado`, "ok");
   } catch(e) { setMsg("admin-msg", "No se pudo crear. Revisá usuario/contraseña o si ya existe.", "err"); }
+};
+$("change-admin-pass-btn").onclick = async () => {
+  const current = $("current-admin-pass").value, next = $("change-admin-pass").value;
+  setMsg("password-msg", "Actualizando contraseña…");
+  try {
+    await rpc("americano_change_admin_password", {p_current_password: current, p_new_password: next});
+    $("current-admin-pass").value = ""; $("change-admin-pass").value = ""; setMsg("password-msg", "Contraseña actualizada", "ok");
+  } catch(e) { setMsg("password-msg", "No se pudo actualizar. Revisá la contraseña actual y usá mínimo 8 caracteres.", "err"); }
 };
 
 load();

@@ -29,5 +29,7 @@ def test_admin_login_markers():
     assert 'Admin login' in HTML
     assert 'americano_admin_login' in HTML
     assert 'americano_create_admin_user' in HTML
+    assert 'americano_change_admin_password' in HTML
+    assert 'Actualizar mi contraseña' in HTML
     assert 'americano-admin-session-v1' in HTML
     assert 'Panel admin' in HTML
