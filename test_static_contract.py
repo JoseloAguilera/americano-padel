@@ -23,4 +23,11 @@ def test_viewer_admin_mode_markers():
     assert 'x-admin-token' in HTML
     assert 'copy-view-link' in HTML
     assert 'copy-admin-link' in HTML
-    assert 'Necesitás el link de administrador' in HTML
+
+
+def test_admin_login_markers():
+    assert 'Admin login' in HTML
+    assert 'americano_admin_login' in HTML
+    assert 'americano_create_admin_user' in HTML
+    assert 'americano-admin-session-v1' in HTML
+    assert 'Panel admin' in HTML

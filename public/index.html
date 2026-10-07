@@ -33,7 +33,7 @@ h1{font-family:"Barlow Condensed",Impact,"Arial Narrow",sans-serif;font-weight:8
 .field{margin:0 0 18px}
 .field label{display:block;font-weight:600;margin-bottom:6px}
 .hint{color:var(--muted);font-size:.85rem;margin:6px 0 0}
-input[type=text],textarea,select{width:100%;font:inherit;color:var(--ink);background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:10px 12px}
+input[type=text],input[type=password],textarea,select{width:100%;font:inherit;color:var(--ink);background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:10px 12px}
 textarea{min-height:280px;resize:vertical;line-height:1.6}
 input:focus-visible,textarea:focus-visible,select:focus-visible{outline:2px solid var(--court);outline-offset:1px}
 .row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
@@ -105,6 +105,13 @@ input:focus-visible,textarea:focus-visible,select:focus-visible{outline:2px soli
 .ghost:focus-visible{outline:2px solid var(--court);outline-offset:2px}
 [hidden]{display:none!important}
 
+.admin-panel{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:14px;margin:0 0 18px}
+.admin-panel h2{font-family:"Barlow Condensed",sans-serif;font-size:1.35rem;margin:0 0 8px}
+.admin-panel .mini{color:var(--muted);font-size:.88rem;margin:0 0 12px}
+.login-card{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:18px;margin-top:10px}
+.form-msg{min-height:1.4em;color:var(--muted);font-size:.9rem;margin:10px 0 0}
+.form-msg.err{color:var(--danger);font-weight:600}
+.form-msg.ok{color:var(--win);font-weight:600}
 .home-actions{display:flex;gap:10px;flex-wrap:wrap;margin:0 0 16px}
 .section-title{font-family:"Barlow Condensed",sans-serif;font-weight:800;font-size:1.45rem;margin:20px 0 8px}
 .cards{display:grid;gap:10px;margin-bottom:18px}
@@ -129,11 +136,48 @@ input:focus-visible,textarea:focus-visible,select:focus-visible{outline:2px soli
   <p class="sub"><span id="subtitle">Cargá las jugadoras para empezar</span> <span class="sync" id="sync"></span></p>
 
 
+
+  <!-- Login administrador -->
+  <section id="login" hidden>
+    <div class="login-card">
+      <div class="field">
+        <label for="login-user">Usuario</label>
+        <input type="text" id="login-user" autocomplete="username" placeholder="Admin">
+      </div>
+      <div class="field">
+        <label for="login-pass">Contraseña</label>
+        <input type="password" id="login-pass" autocomplete="current-password" placeholder="Contraseña">
+      </div>
+      <button class="primary" id="login-submit">Entrar como admin</button>
+      <p class="form-msg" id="login-msg"></p>
+      <div class="actions"><button class="ghost" id="login-back">Volver a visitantes</button></div>
+    </div>
+  </section>
+
   <!-- Pantalla inicial -->
   <section id="home" hidden>
     <div class="home-actions">
       <button class="primary" id="create-tournament">Crear nuevo torneo</button>
       <button class="ghost" id="refresh-tournaments">Actualizar</button>
+      <button class="ghost" id="admin-login-link">Admin login</button>
+    </div>
+
+    <div class="admin-panel" id="admin-panel" hidden>
+      <h2>Panel admin</h2>
+      <p class="mini">Podés crear torneos y agregar otros usuarios administradores.</p>
+      <div class="row field">
+        <div>
+          <label for="new-admin-user">Nuevo usuario</label>
+          <input type="text" id="new-admin-user" autocomplete="off" placeholder="nombre">
+        </div>
+        <div>
+          <label for="new-admin-pass">Contraseña</label>
+          <input type="password" id="new-admin-pass" autocomplete="new-password" placeholder="mínimo 5 caracteres">
+        </div>
+      </div>
+      <button class="ghost" id="add-admin-user">Agregar usuario admin</button>
+      <button class="ghost" id="logout-admin">Cerrar sesión</button>
+      <p class="form-msg" id="admin-msg"></p>
     </div>
     <h2 class="section-title">Torneos activos</h2>
     <div class="cards" id="active-list"></div>
@@ -171,7 +215,7 @@ input:focus-visible,textarea:focus-visible,select:focus-visible{outline:2px soli
   <section id="game" hidden>
     <div class="top-actions"><button class="ghost" id="game-home">Ver torneos</button><button class="ghost" id="finish">Finalizar torneo</button></div>
     <div class="share-box" id="share-box" hidden><b>Link para compartir:</b> los demás solo pueden ver clasificación y partidos.
-      <div class="share-row"><button class="ghost" id="copy-view-link">Copiar link público</button><button class="ghost" id="copy-admin-link">Copiar mi link de edición</button></div>
+      <div class="share-row"><button class="ghost" id="copy-view-link">Copiar link público</button><button class="ghost" id="copy-admin-link">Copiar link de login admin</button></div>
     </div>
     <div class="viewer-note" id="viewer-note" hidden>Modo solo lectura: podés ver clasificación y partidos, pero no modificar puntos.</div>
     <section class="court" id="court" aria-live="polite"></section>
@@ -337,12 +381,15 @@ const SUPABASE_TABLE = "americano_tournaments";
 let S = null;              // estado: {title, players, courts, target, matches:[{a,b,round,court}], scores, cur, status}
 let currentId = null, tournaments = [], pending = false, lastUpdatedAt = null;
 const initialParams = new URLSearchParams(location.search);
-let authToken = initialParams.get("admin") || initialParams.get("edit") || "";
+const ADMIN_SESSION_KEY = "americano-admin-session-v1";
+function storedSession(){ try { return JSON.parse(localStorage.getItem(ADMIN_SESSION_KEY) || "null"); } catch(e) { return null; } }
+let adminSession = storedSession();
+let authToken = initialParams.get("admin") || initialParams.get("edit") || adminSession?.token || "";
 let currentEditToken = authToken || "";
 const isAdmin = () => !!authToken;
 function newToken(){ const a = new Uint8Array(24); crypto.getRandomValues(a); return Array.from(a, b => b.toString(16).padStart(2,"0")).join(""); }
 function publicLink(){ return currentId ? `${location.origin}${location.pathname}?id=${encodeURIComponent(currentId)}` : `${location.origin}${location.pathname}`; }
-function adminLink(){ return currentId && authToken ? `${location.origin}${location.pathname}?id=${encodeURIComponent(currentId)}&admin=${encodeURIComponent(authToken)}` : `${location.origin}${location.pathname}${authToken ? `?admin=${encodeURIComponent(authToken)}` : ""}`; }
+function adminLink(){ return `${location.origin}/admin/login`; }
 async function copyText(txt){ try { await navigator.clipboard.writeText(txt); setSync("Link copiado", true); } catch(e) { prompt("Copiá este link", txt); } }
 
 /* ---------- Supabase: guardado persistente multi-teléfono ---------- */
@@ -356,6 +403,12 @@ async function sb(path, opts={}){
   if (!r.ok) throw new Error(await r.text());
   return r.status === 204 ? null : await r.json();
 }
+async function rpc(name, body={}){
+  const r = await fetch(`${SUPABASE_URL}/rest/v1/rpc/${name}`, {method:"POST", headers:supabaseHeaders(), body:JSON.stringify(body)});
+  if (!r.ok) throw new Error(await r.text());
+  return await r.json();
+}
+function setMsg(id, text, kind="") { const el=$(id); el.textContent=text; el.className="form-msg" + (kind ? ` ${kind}` : ""); }
 function stateForSave(){ return {...S, updatedAt: new Date().toISOString()}; }
 async function listTournaments(){
   tournaments = await sb(`${SUPABASE_TABLE}?select=id,title,status,state,created_at,updated_at&order=updated_at.desc`);
@@ -366,7 +419,7 @@ async function openTournament(id){
   if (!rows.length) throw new Error("Torneo no encontrado");
   const row = rows[0]; currentId = row.id; S = row.state || {}; S.status = row.status || S.status || "active"; lastUpdatedAt = row.updated_at;
   currentEditToken = authToken || currentEditToken;
-  history.replaceState(null, "", isAdmin() ? `?id=${currentId}&admin=${encodeURIComponent(authToken)}` : `?id=${currentId}`);
+  history.replaceState(null, "", `/?id=${currentId}`);
   setSync(isAdmin() ? "Modo edición" : "Modo solo lectura", true); route("game");
 }
 async function createTournamentRecord(){
@@ -376,7 +429,7 @@ async function createTournamentRecord(){
   const rows = await sb(`${SUPABASE_TABLE}?select=id,updated_at`, {method:"POST", headers:{Prefer:"return=representation"}, body:JSON.stringify(payload)});
   if (!rows || !rows.length) throw new Error("No autorizado");
   currentId = rows[0].id; lastUpdatedAt = rows[0].updated_at;
-  history.replaceState(null, "", `?id=${currentId}&admin=${encodeURIComponent(authToken)}`);
+  history.replaceState(null, "", `/?id=${currentId}`);
 }
 async function save(){
   if (!isAdmin()) { setSync("Modo solo lectura", true); return; }
@@ -397,6 +450,7 @@ async function save(){
   } finally { pending = false; }
 }
 async function load(){
+  if (location.pathname.replace(/\/$/, "") === "/admin/login") { route("login"); return; }
   try {
     await listTournaments();
     const id = new URLSearchParams(location.search).get("id");
@@ -435,9 +489,9 @@ function renderTournamentList(id, rows, emptyText){
   el.querySelectorAll('[data-action="open-tournament"]').forEach(btn => btn.onclick = async () => { setSync("Abriendo torneo…"); await openTournament(btn.dataset.id); });
 }
 async function renderHome(){
-  $("home").hidden = false; $("setup").hidden = true; $("game").hidden = true;
-  $("create-tournament").hidden = !isAdmin();
-  $("title").textContent = "Americano de pádel"; $("subtitle").textContent = isAdmin() ? "Elegí un torneo o creá uno nuevo" : "Elegí un torneo para ver clasificación y partidos"; document.title = "Americano de pádel";
+  $("home").hidden = false; $("setup").hidden = true; $("game").hidden = true; $("login").hidden = true;
+  $("create-tournament").hidden = !isAdmin(); $("admin-panel").hidden = !isAdmin(); $("admin-login-link").hidden = isAdmin();
+  $("title").textContent = "Americano de pádel"; $("subtitle").textContent = isAdmin() ? "Sesión admin activa: podés crear y editar torneos" : "Elegí un torneo para ver clasificación y partidos"; document.title = "Americano de pádel";
   try { await listTournaments(); setSync("Sincronizado con Supabase", true); } catch(e) { setSync("No se pudo actualizar la lista"); }
   renderTournamentList("active-list", tournaments.filter(t=>t.status === "active"), "No hay torneos activos.");
   renderTournamentList("finished-list", tournaments.filter(t=>t.status !== "active"), "Todavía no hay torneos anteriores.");
@@ -587,6 +641,8 @@ function renderGame(){
 
 function route(view){
   const playing = S && S.matches && S.matches.length;
+  if (view === "login") { $("home").hidden = true; $("setup").hidden = true; $("game").hidden = true; $("login").hidden = false; $("title").textContent = "Admin login"; $("subtitle").textContent = "Ingresá para crear torneos y cargar resultados"; document.title = "Admin login"; return; }
+  $("login").hidden = true;
   if (view === "home") return renderHome();
   $("home").hidden = true;
   $("setup").hidden = view !== "setup" && !!playing;
@@ -619,14 +675,39 @@ function twoTap(btn, label, onConfirm){
   };
 }
 twoTap($("reset"), "Borrar todos los resultados", () => { S.scores = S.matches.map(()=>[0,0]); S.cur = 0; save(); renderGame(); });
-twoTap($("newgame"), "Nuevo americano", () => { currentId = null; S = null; history.replaceState(null, "", authToken ? `${location.pathname}?admin=${encodeURIComponent(authToken)}` : location.pathname); $("f-title").value = ""; $("f-players").value = ""; route("setup"); });
+twoTap($("newgame"), "Nuevo americano", () => { currentId = null; S = null; history.replaceState(null, "", location.pathname === "/admin/login" ? "/" : location.pathname); $("f-title").value = ""; $("f-players").value = ""; route("setup"); });
 twoTap($("finish"), "Finalizar torneo", () => { S.status = "finished"; save(); renderGame(); });
-$("create-tournament").onclick = () => { currentId = null; S = null; history.replaceState(null, "", authToken ? `${location.pathname}?admin=${encodeURIComponent(authToken)}` : location.pathname); $("f-title").value = ""; $("f-players").value = ""; route("setup"); };
+$("create-tournament").onclick = () => { currentId = null; S = null; history.replaceState(null, "", location.pathname === "/admin/login" ? "/" : location.pathname); $("f-title").value = ""; $("f-players").value = ""; route("setup"); };
 $("refresh-tournaments").onclick = () => renderHome();
-$("setup-home").onclick = () => { history.replaceState(null, "", authToken ? `${location.pathname}?admin=${encodeURIComponent(authToken)}` : location.pathname); renderHome(); };
-$("game-home").onclick = () => { history.replaceState(null, "", authToken ? `${location.pathname}?admin=${encodeURIComponent(authToken)}` : location.pathname); renderHome(); };
+$("setup-home").onclick = () => { history.replaceState(null, "", "/"); renderHome(); };
+$("game-home").onclick = () => { history.replaceState(null, "", "/"); renderHome(); };
 $("copy-view-link").onclick = () => copyText(publicLink());
 $("copy-admin-link").onclick = () => copyText(adminLink());
+
+$("admin-login-link").onclick = () => { history.pushState(null, "", "/admin/login"); route("login"); };
+$("login-back").onclick = () => { history.replaceState(null, "", "/"); route("home"); };
+$("login-submit").onclick = async () => {
+  const username = $("login-user").value.trim(), password = $("login-pass").value;
+  setMsg("login-msg", "Entrando…");
+  try {
+    const rows = await rpc("americano_admin_login", {p_username: username, p_password: password});
+    const row = rows[0]; if (!row?.token) throw new Error("Login inválido");
+    adminSession = {token: row.token, username: row.username, expires_at: row.expires_at};
+    localStorage.setItem(ADMIN_SESSION_KEY, JSON.stringify(adminSession));
+    authToken = row.token; currentEditToken = row.token;
+    history.replaceState(null, "", "/"); setMsg("login-msg", "Sesión iniciada", "ok"); await renderHome();
+  } catch(e) { setMsg("login-msg", "Usuario o contraseña incorrectos", "err"); }
+};
+$("login-pass").addEventListener("keydown", e => { if (e.key === "Enter") $("login-submit").click(); });
+$("logout-admin").onclick = () => { localStorage.removeItem(ADMIN_SESSION_KEY); adminSession = null; authToken = ""; currentEditToken = ""; setSync("Modo visitante", true); renderHome(); };
+$("add-admin-user").onclick = async () => {
+  const username = $("new-admin-user").value.trim(), password = $("new-admin-pass").value;
+  setMsg("admin-msg", "Creando usuario…");
+  try {
+    await rpc("americano_create_admin_user", {p_username: username, p_password: password});
+    $("new-admin-user").value = ""; $("new-admin-pass").value = ""; setMsg("admin-msg", `Usuario ${username} creado`, "ok");
+  } catch(e) { setMsg("admin-msg", "No se pudo crear. Revisá usuario/contraseña o si ya existe.", "err"); }
+};
 
 load();
 </script>

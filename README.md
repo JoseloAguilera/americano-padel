@@ -15,9 +15,11 @@ La app está publicada como sitio estático en Vercel y guarda los torneos en Su
 
 ## Modo administrador y modo público
 
-- El link con `admin=...` permite crear/editar.
-- El link público con solo `id=...` permite ver clasificación y partidos sin botones para cambiar puntos.
-- Supabase también bloquea escrituras sin el header `x-admin-token`, no es solo ocultar botones.
+- El acceso administrador se hace desde `/admin/login`.
+- Usuario inicial: `Admin`; contraseña inicial: `12345`. Cambiarla o crear otro usuario más seguro desde el panel admin.
+- Al iniciar sesión como admin se pueden crear torneos, cargar resultados y agregar otros usuarios administradores.
+- Sin sesión admin, la misma web queda como visitante: solo permite ver clasificación y partidos.
+- Supabase también bloquea escrituras sin sesión/token válido; no es solo ocultar botones.
 
 ## Supabase
 
