@@ -35,3 +35,10 @@ def test_admin_login_markers():
     assert 'Panel admin' in HTML
     assert 'La contraseña actual es incorrecta.' in HTML
     assert '$("current-admin-pass").value = ""' in HTML
+
+
+def test_brand_logo_and_favicon_markers():
+    assert 'rel="icon" type="image/svg+xml" href="/favicon.svg"' in HTML
+    assert 'rel="apple-touch-icon" href="/logo-padel.svg"' in HTML
+    assert 'class="brand-mark" src="/logo-padel.svg"' in HTML
+    assert 'Logo de pala de pádel con pelota' in HTML

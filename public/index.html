@@ -4,6 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Americano de pádel</title>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="apple-touch-icon" href="/logo-padel.svg">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700;800&family=Figtree:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -28,6 +30,11 @@ h1{font-family:"Barlow Condensed",Impact,"Arial Narrow",sans-serif;font-weight:8
 .sub{color:var(--muted);margin:0 0 16px;font-size:.95rem}
 .sync{display:inline-block;font-size:.8rem;color:var(--muted);margin-left:4px}
 .sync.on::before{content:"";display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--win);margin-right:5px;vertical-align:1px}
+.brand{display:flex;align-items:center;gap:12px;margin:2px 0 14px}
+.brand-mark{width:62px;height:62px;border-radius:18px;box-shadow:0 8px 24px rgba(19,35,58,.16);flex:0 0 auto}
+.brand-copy{min-width:0}
+.brand h1{margin:0 0 2px}
+.brand .sub{margin:0}
 
 /* Setup */
 .field{margin:0 0 18px}
@@ -132,8 +139,13 @@ input:focus-visible,textarea:focus-visible,select:focus-visible{outline:2px soli
 </head>
 <body>
 <div class="wrap">
-  <h1 id="title">Americano de pádel</h1>
-  <p class="sub"><span id="subtitle">Cargá las jugadoras para empezar</span> <span class="sync" id="sync"></span></p>
+  <header class="brand" aria-label="Americano de pádel">
+    <img class="brand-mark" src="/logo-padel.svg" alt="Logo de pala de pádel con pelota" width="62" height="62">
+    <div class="brand-copy">
+      <h1 id="title">Americano de pádel</h1>
+      <p class="sub"><span id="subtitle">Cargá las jugadoras para empezar</span> <span class="sync" id="sync"></span></p>
+    </div>
+  </header>
 
 
 
